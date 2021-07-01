@@ -129,8 +129,9 @@ def collate_pool(dataset_list):
     batch_atom_fea, batch_nbr_fea, batch_nbr_fea_idx = [], [], []
     crystal_atom_idx, batch_target = [], []
     batch_cif_ids = []
+    batch_matminer_feat = []
     base_idx = 0
-    for i, ((atom_fea, nbr_fea, nbr_fea_idx), target, cif_id)\
+    for i, ((atom_fea, nbr_fea, nbr_fea_idx), target, cif_id, matminer_feat)\
             in enumerate(dataset_list):
         n_i = atom_fea.shape[0]  # number of atoms for this crystal
         batch_atom_fea.append(atom_fea)
@@ -141,12 +142,14 @@ def collate_pool(dataset_list):
         batch_target.append(target)
         batch_cif_ids.append(cif_id)
         base_idx += n_i
+        batch_matminer_feat.append(matminer_feat)
     return (torch.cat(batch_atom_fea, dim=0),
             torch.cat(batch_nbr_fea, dim=0),
             torch.cat(batch_nbr_fea_idx, dim=0),
             crystal_atom_idx),\
         torch.stack(batch_target, dim=0),\
-        batch_cif_ids
+        batch_cif_ids, torch.stack(batch_matminer_feat, dim=0)
+        
 
 
 class GaussianDistance(object):
@@ -311,7 +314,12 @@ class CIFData(Dataset):
         assert os.path.exists(atom_init_file), 'atom_init.json does not exist!'
         self.ari = AtomCustomJSONInitializer(atom_init_file)
         self.gdf = GaussianDistance(dmin=dmin, dmax=self.radius, step=step)
-
+        
+        with open(os.path.join(self.root_dir, 'matminer_feat.json')) as f:
+            self.matminer_feat = json.load(f)
+        self.matminer_feat = {
+            k: torch.tensor(list(v.values())) for k, v in self.matminer_feat.items()
+        }
     def __len__(self):
         return len(self.id_prop_data)
 
@@ -347,4 +355,4 @@ class CIFData(Dataset):
         nbr_fea = torch.Tensor(nbr_fea)
         nbr_fea_idx = torch.LongTensor(nbr_fea_idx)
         target = torch.Tensor([float(target)])
-        return (atom_fea, nbr_fea, nbr_fea_idx), target, cif_id
+        return (atom_fea, nbr_fea, nbr_fea_idx), target, cif_id, self.matminer_feat[cif_id]
