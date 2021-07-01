@@ -117,12 +117,16 @@ class CrystalGraphConvNet(nn.Module):
         if self.classification:
             self.fc_out = nn.Linear(h_fea_len, 2)
         else:
-            self.fc_out = nn.Linear(h_fea_len, 1)
+            self.fc_gnn = nn.Linear(h_fea_len, 64)
+            self.fc_matminer = nn.Linear(2724, 512)
+            self.fc_1 = nn.Linear(576, 256)
+            self.fc_out = nn.Linear(256, 1)
+            
         if self.classification:
             self.logsoftmax = nn.LogSoftmax(dim=1)
             self.dropout = nn.Dropout()
 
-    def forward(self, atom_fea, nbr_fea, nbr_fea_idx, crystal_atom_idx):
+    def forward(self, atom_fea, nbr_fea, nbr_fea_idx, crystal_atom_idx, matminer_feat):
         """
         Forward pass
 
@@ -160,7 +164,13 @@ class CrystalGraphConvNet(nn.Module):
         if hasattr(self, 'fcs') and hasattr(self, 'softpluses'):
             for fc, softplus in zip(self.fcs, self.softpluses):
                 crys_fea = softplus(fc(crys_fea))
-        out = self.fc_out(crys_fea)
+        out_gnn = nn.functional.softplus(self.fc_gnn(crys_fea))
+        out_matminer = nn.functional.softplus(self.fc_matminer(matminer_feat))
+        out = nn.functional.softplus(self.fc_1(torch.cat([out_matminer, out_gnn], dim=-1)))
+
+        
+        out = self.fc_out(out)
+        
         if self.classification:
             out = self.logsoftmax(out)
         return out

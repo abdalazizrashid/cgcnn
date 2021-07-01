@@ -120,11 +120,11 @@ def main():
         else:
             sample_data_list = [dataset[i] for i in
                                 sample(range(len(dataset)), 500)]
-        _, sample_target, _ = collate_pool(sample_data_list)
+        _, sample_target, _, _ = collate_pool(sample_data_list)
         normalizer = Normalizer(sample_target)
 
     # build model
-    structures, _, _ = dataset[0]
+    structures, _, _, _ = dataset[0]
     orig_atom_fea_len = structures[0].shape[-1]
     nbr_fea_len = structures[1].shape[-1]
     model = CrystalGraphConvNet(orig_atom_fea_len, nbr_fea_len,
@@ -221,9 +221,8 @@ def train(train_loader, model, criterion, optimizer, epoch, normalizer):
 
     # switch to train mode
     model.train()
-
     end = time.time()
-    for i, (input, target, _) in enumerate(train_loader):
+    for i, (input, target, _, matminer_feat) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
@@ -231,7 +230,8 @@ def train(train_loader, model, criterion, optimizer, epoch, normalizer):
             input_var = (Variable(input[0].cuda(non_blocking=True)),
                          Variable(input[1].cuda(non_blocking=True)),
                          input[2].cuda(non_blocking=True),
-                         [crys_idx.cuda(non_blocking=True) for crys_idx in input[3]])
+                         [crys_idx.cuda(non_blocking=True) for crys_idx in input[3]]
+                        )
         else:
             input_var = (Variable(input[0]),
                          Variable(input[1]),
@@ -246,10 +246,10 @@ def train(train_loader, model, criterion, optimizer, epoch, normalizer):
             target_var = Variable(target_normed.cuda(non_blocking=True))
         else:
             target_var = Variable(target_normed)
-
         # compute output
-        output = model(*input_var)
+        output = model(*input_var, matminer_feat=normalizer.norm(matminer_feat.cuda()))
         loss = criterion(output, target_var)
+
 
         # measure accuracy and record loss
         if args.task == 'regression':
@@ -322,7 +322,7 @@ def validate(val_loader, model, criterion, normalizer, test=False):
     model.eval()
 
     end = time.time()
-    for i, (input, target, batch_cif_ids) in enumerate(val_loader):
+    for i, (input, target, batch_cif_ids, matminer_feat) in enumerate(val_loader):
         if args.cuda:
             with torch.no_grad():
                 input_var = (Variable(input[0].cuda(non_blocking=True)),
@@ -347,7 +347,7 @@ def validate(val_loader, model, criterion, normalizer, test=False):
                 target_var = Variable(target_normed)
 
         # compute output
-        output = model(*input_var)
+        output = model(*input_var, matminer_feat=matminer_feat.cuda())
         loss = criterion(output, target_var)
 
         # measure accuracy and record loss

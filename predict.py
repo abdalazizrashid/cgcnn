@@ -56,7 +56,7 @@ def main():
                              pin_memory=args.cuda)
 
     # build model
-    structures, _, _ = dataset[0]
+    structures, _, _, _ = dataset[0]
     orig_atom_fea_len = structures[0].shape[-1]
     nbr_fea_len = structures[1].shape[-1]
     model = CrystalGraphConvNet(orig_atom_fea_len, nbr_fea_len,
@@ -122,7 +122,7 @@ def validate(val_loader, model, criterion, normalizer, test=False):
     model.eval()
 
     end = time.time()
-    for i, (input, target, batch_cif_ids) in enumerate(val_loader):
+    for i, (input, target, batch_cif_ids, matminer_feat) in enumerate(val_loader):
         with torch.no_grad():
             if args.cuda:
                 input_var = (Variable(input[0].cuda(non_blocking=True)),
@@ -145,7 +145,7 @@ def validate(val_loader, model, criterion, normalizer, test=False):
                 target_var = Variable(target_normed)
 
         # compute output
-        output = model(*input_var)
+        output = model(*input_var, matminer_feat=normalizer.norm(matminer_feat.cuda()))
         loss = criterion(output, target_var)
 
         # measure accuracy and record loss
